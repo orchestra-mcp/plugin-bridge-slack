@@ -37,6 +37,14 @@ func NewBot(cfg *Config, caller ToolCaller) *Bot {
 	}
 }
 
+// SetCaller replaces the tool caller after construction (e.g. once the
+// orchestrator client is available).
+func (b *Bot) SetCaller(caller ToolCaller) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.caller = caller
+}
+
 // SetHandlerRegistrar sets the callback used to register handlers on Start.
 func (b *Bot) SetHandlerRegistrar(fn HandlerRegistrar) {
 	b.registrar = fn

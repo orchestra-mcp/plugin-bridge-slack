@@ -31,7 +31,7 @@ func (h *ChatHandler) HandleMessage(msg *internal.MessageEvent, api internal.Han
 	prompt := strings.TrimPrefix(msg.Text, "chat ")
 	prompt = strings.TrimPrefix(prompt, "Chat ")
 	if prompt == "" {
-		blocks, attachments := internal.InfoBlocks("Usage", "`!chat <prompt>`")
+		blocks, attachments := internal.InfoBlocks("Usage", "`!chat <prompt>` or `!chat @workspace <prompt>`")
 		api.SendToChannel(msg.Channel, "", blocks, attachments)
 		return
 	}
@@ -50,11 +50,59 @@ func (h *ChatHandler) HandleSlashCommand(cmd *internal.SlashCommandPayload, api 
 	h.doChat(cmd.ChannelID, prompt, api)
 }
 
+// parseWorkspace extracts @workspace-id from the beginning of a prompt.
+// Returns (workspaceID, remainingPrompt). If no @workspace prefix, returns ("", original).
+func parseWorkspace(prompt string) (string, string) {
+	if !strings.HasPrefix(prompt, "@") {
+		return "", prompt
+	}
+	parts := strings.SplitN(prompt, " ", 2)
+	wsID := strings.TrimPrefix(parts[0], "@")
+	if len(parts) < 2 {
+		return wsID, ""
+	}
+	return wsID, parts[1]
+}
+
 func (h *ChatHandler) doChat(channelID, prompt string, api internal.HandlerAPI) {
+	cfg := api.Config()
+
+	// Check for workspace routing: "!chat @workspace-id what is the status?"
+	wsID, remainingPrompt := parseWorkspace(prompt)
+
+	// If no explicit workspace but default is configured, use it when API is available
+	if wsID == "" && cfg.DefaultWorkspace != "" && cfg.APIURL != "" {
+		wsID = cfg.DefaultWorkspace
+		remainingPrompt = prompt
+	}
+
+	// Route through web server API if workspace is specified and API is configured
+	if wsID != "" && cfg.APIURL != "" && cfg.APIToken != "" {
+		if remainingPrompt == "" {
+			blocks, attachments := internal.ErrorBlocks("Error", "Please provide a prompt after the workspace name")
+			api.SendToChannel(channelID, "Error", blocks, attachments)
+			return
+		}
+
+		blocks, attachments := internal.InfoBlocks("Processing", fmt.Sprintf("Workspace `%s`\n```\n%s\n```", wsID, internal.Truncate(remainingPrompt, 200)))
+		api.SendToChannel(channelID, "Processing...", blocks, attachments)
+
+		client := internal.NewWorkspaceClient(cfg.APIURL, cfg.APIToken)
+		result, err := client.Chat(wsID, remainingPrompt)
+		if err != nil {
+			blocks, attachments = internal.ErrorBlocks("Error", err.Error())
+			api.SendToChannel(channelID, "Error", blocks, attachments)
+			return
+		}
+
+		h.sendResponse(channelID, result, api)
+		return
+	}
+
+	// Fallback: local CallTool("ai_prompt", ...)
 	blocks, attachments := internal.InfoBlocks("Processing", fmt.Sprintf("```\n%s\n```", internal.Truncate(prompt, 200)))
 	api.SendToChannel(channelID, "Processing...", blocks, attachments)
 
-	// Call ai_prompt tool via cross-plugin bridge
 	result, err := api.CallTool("ai_prompt", map[string]any{
 		"prompt": prompt,
 		"wait":   true,
@@ -65,16 +113,19 @@ func (h *ChatHandler) doChat(channelID, prompt string, api internal.HandlerAPI) 
 		return
 	}
 
-	// Split long responses for Slack's block text limit
+	h.sendResponse(channelID, result, api)
+}
+
+func (h *ChatHandler) sendResponse(channelID, result string, api internal.HandlerAPI) {
 	if len(result) <= internal.SafeBlockText {
-		blocks, attachments = internal.SuccessBlocks("Response", result)
+		blocks, attachments := internal.SuccessBlocks("Response", result)
 		api.SendToChannel(channelID, "Response", blocks, attachments)
 		return
 	}
 	chunks := splitMessage(result, internal.SafeBlockText)
 	for i, chunk := range chunks {
 		title := fmt.Sprintf("Response (%d/%d)", i+1, len(chunks))
-		blocks, attachments = internal.SuccessBlocks(title, chunk)
+		blocks, attachments := internal.SuccessBlocks(title, chunk)
 		api.SendToChannel(channelID, title, blocks, attachments)
 	}
 }

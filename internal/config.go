@@ -8,16 +8,19 @@ import (
 
 // Config holds Slack bot configuration.
 type Config struct {
-	Enabled        bool     `json:"enabled"`
-	BotToken       string   `json:"bot_token"`       // xoxb- bot token
-	AppToken       string   `json:"app_token"`        // xapp- app-level token for Socket Mode
-	SigningSecret   string   `json:"signing_secret"`
-	AppID          string   `json:"app_id"`
-	ChannelID      string   `json:"channel_id"`
-	CommandPrefix  string   `json:"command_prefix"`
-	WebhookURL     string   `json:"webhook_url"`
-	AllowedUsers   []string `json:"allowed_users"`
-	TeamID         string   `json:"team_id"`
+	Enabled          bool     `json:"enabled"`
+	BotToken         string   `json:"bot_token"`        // xoxb- bot token
+	AppToken         string   `json:"app_token"`         // xapp- app-level token for Socket Mode
+	SigningSecret    string   `json:"signing_secret"`
+	AppID            string   `json:"app_id"`
+	ChannelID        string   `json:"channel_id"`
+	CommandPrefix    string   `json:"command_prefix"`
+	WebhookURL       string   `json:"webhook_url"`
+	AllowedUsers     []string `json:"allowed_users"`
+	TeamID           string   `json:"team_id"`
+	APIURL           string   `json:"api_url"`            // Orchestra web server URL (e.g. https://orchestra-mcp.dev)
+	APIToken         string   `json:"api_token"`           // API auth token for web server
+	DefaultWorkspace string   `json:"default_workspace"`   // Default workspace ID for chat routing
 }
 
 // DefaultConfig returns default Slack configuration.

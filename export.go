@@ -15,13 +15,19 @@ type Cleanup func()
 // Register adds all Slack bridge tools to the builder and starts the bot
 // in the background if configured. Returns a cleanup function.
 func Register(builder *plugin.PluginBuilder) Cleanup {
-	return RegisterWithContext(context.Background(), builder)
+	return RegisterWithContext(context.Background(), builder, nil)
 }
 
-// RegisterWithContext is like Register but accepts a context for the bot lifecycle.
-func RegisterWithContext(ctx context.Context, builder *plugin.PluginBuilder) Cleanup {
+// RegisterWithContext is like Register but accepts a context for the bot
+// lifecycle and an optional Sender for cross-plugin tool calls.
+func RegisterWithContext(ctx context.Context, builder *plugin.PluginBuilder, sender internal.Sender) Cleanup {
 	cfg := internal.LoadConfig()
-	bot := internal.NewBot(cfg, nil)
+
+	var caller internal.ToolCaller
+	if sender != nil {
+		caller = internal.MakeToolCaller(ctx, sender)
+	}
+	bot := internal.NewBot(cfg, caller)
 
 	// Wire up handler registration (avoids import cycle in internal)
 	bot.SetHandlerRegistrar(func(r *internal.Router) {
